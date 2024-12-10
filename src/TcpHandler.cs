@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Text;
 
+namespace VioletaRedis.src;
+
 public class TcpHandler
 {
     public static ConcurrentDictionary<string, string> env = [];
@@ -47,7 +49,7 @@ public class TcpHandler
 
         var response = Encoding.ASCII.GetBytes(ok);
 
-        if (expiry != ""); // TODO
+        if (expiry != "") ; // TODO
 
         await stream.WriteAsync(response, 0, response.Length);
     }
