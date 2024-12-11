@@ -1,65 +1,102 @@
 using System.Collections.Concurrent;
+using System.Net.Security;
 using System.Net.Sockets;
 using System.Text;
+using static VioletaRedis.src.Server;
 
 namespace VioletaRedis.src;
 
-public class TcpHandler
+public struct TcpHandler
 {
-    public static ConcurrentDictionary<string, string> env = [];
-    public TcpClient client;
-    public NetworkStream stream;
-    public Memory<byte> buffer;
+    readonly Server Server;
+    public TcpClient Client;
+    public NetworkStream Stream;
+    public Memory<byte> Buffer;
 
-    public TcpHandler(TcpClient _client)
+
+    public TcpHandler(TcpClient _client, Server server)
     {
-        client = _client;
-        stream = client.GetStream();
+        Client = _client;
+        Stream = Client.GetStream();
+        Server = server;
 
         Span<byte> buf = new();
-        _ = stream.Read(buf);
+        _ = Stream.Read(buf);
     }
 
-    public Task HandleMessage() => buffer.ToString().Split(" ") switch
+    public readonly Task HandleMessage() => Buffer.ToString().Split(" ") switch
     {
     ["PING"] => HandlePing(),
     ["ECHO", ..] => HandleEcho(),
-    ["SET", var key, var val] => HandleSet(key, val),
-    ["SET", var key, var val, "px", var expiry] => HandleSet(key, val, expiry),
+    ["SET", var key, var val] => HandleSet(key, Encoding.ASCII.GetBytes(val)),
+    ["SET", var key, var val, "px", var expiry] => HandleSet(key, Encoding.ASCII.GetBytes(val), TimeSpan.FromMilliseconds(double.Parse(expiry))),
     ["GET", var key] => HandleGet(key),
+    ["CONFIG", "GET", var key] => HandleConfigGet(key),
+    ["CONFIG", "SET", var key, var val] => HandleConfigSet(key, val),
+    ["KEYS", var pattern] => HandleGetKeys(pattern),
         _ => throw new NotImplementedException(),
     };
 
-    async Task HandlePing()
+    async readonly Task HandlePing()
     {
         byte[] response = Encoding.ASCII.GetBytes("+PONG\r\n");
-        await stream.WriteAsync(response, 0, response.Length);
+        await Stream.WriteAsync(response, 0, response.Length);
         Console.WriteLine("Sent: PONG");
     }
 
-    async Task HandleEcho()
+    async readonly Task HandleEcho()
     {
-        await stream.WriteAsync(buffer);
+        await Stream.WriteAsync(Buffer);
     }
 
 
-    async Task HandleSet(string key, string val, string expiry = "")
+    async readonly Task HandleSet(string key, byte[] val, TimeSpan? expiry = null)
     {
-        var ok = env.TryAdd(key, val) ? "+OK\r\n" : "$-1\r\n";
+        var ok = Server.Data.TryAdd(key, new StoreValue(val, DateTime.Now + expiry)) ? "+OK\r\n" : "$-1\r\n";
 
         var response = Encoding.ASCII.GetBytes(ok);
 
-        if (expiry != "") ; // TODO
 
-        await stream.WriteAsync(response, 0, response.Length);
+        await Stream.WriteAsync(response, 0, response.Length);
     }
 
-    async Task HandleGet(string key)
+    async readonly Task HandleGet(string key)
     {
-        env.TryGetValue(key, out string? value);
+        Server.Data.TryGetValue(key, out StoreValue? value);
+        if (value is null) return;
 
-        var val = Encoding.ASCII.GetBytes("$3\r\n" + value ?? "$-1\r\n" + "\r\n");
+        string response = value.Expiry > DateTime.Now
+            ? "$3\r\n" + value.Value ?? "$-1\r\n" + "\r\n"
+            : "$-1\r\n";
 
-        await stream.WriteAsync(val, 0, val.Length);
+        var responseBytes = Encoding.ASCII.GetBytes(response);
+        await Stream.WriteAsync(responseBytes, 0, responseBytes.Length);
+    }
+
+    async readonly Task HandleConfigSet(string key, string val)
+    {
+        var ok = Server.Config.TryAdd(key, val);
+
+        var responseBytes = Encoding.ASCII.GetBytes(ok ? "+OK\r\n" : "$-1\r\n");
+        await Stream.WriteAsync(responseBytes, 0, responseBytes.Length);
+    }
+
+    async readonly Task HandleConfigGet(string key)
+    {
+        Server.Config.TryGetValue(key, out string? value);
+
+        string response = "$3\r\n" + value ?? "$-1\r\n" + "\r\n";
+
+        var responseBytes = Encoding.ASCII.GetBytes(response);
+        await Stream.WriteAsync(responseBytes, 0, responseBytes.Length);
+    }
+
+    async readonly Task HandleGetKeys(string pattern)
+    {
+        string[] keys = [];
+        if (pattern == "*") keys = [.. Server.Data.Keys];
+
+        var responseBytes = Encoding.ASCII.GetBytes(keys.ToString() ?? "");
+        await Stream.WriteAsync(responseBytes, 0, responseBytes.Length);
     }
 };
