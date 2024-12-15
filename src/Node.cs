@@ -3,31 +3,16 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 
-namespace VioletaRedis.src;
+namespace Shard.src;
 
-public class Server
+public class Node
 {
-    public enum ValueType : short
+    public enum NodeType
     {
-        String,
-        List,
-        Set,
-        SortedSet,
-        Hash,
-        Zipmap,
-        Ziplist,
-        Intset,
-        SortedSetinZiplist,
-        HashmapinZiplist,
-        ListinQuicklist
+        Leader,
+        Follower
     }
-
-    public record StoreValue(byte[] Value, DateTime? Expiry = null)
-    {
-        public ValueType Encoding;
-        public byte[] Value = Value;
-        public DateTime? Expiry = Expiry;
-    }
+    NodeType type = NodeType.Follower;
 
     public ConcurrentDictionary<string, StoreValue> Data = [];
 
@@ -41,8 +26,9 @@ public class Server
 
     readonly TcpListener listener;
 
-    public Server(IPAddress ip, int port)
+    public Node(IPAddress ip, int port, NodeType type = NodeType.Follower)
     {
+        this.type = type;
         if (Config["dbfilename"] != "")
             LoadDataFromFile(Path.Combine(Config["dir"], Config["dbfilename"]));
         listener = new(ip, port);
@@ -117,7 +103,7 @@ public class Server
         {
             try
             {
-                Console.WriteLine("Server waiting!!!");
+                Console.WriteLine("Server {0} waiting!!!", type);
                 using TcpClient client = await listener.AcceptTcpClientAsync();
                 await new TcpHandler(client, this).HandleMessage();
             }

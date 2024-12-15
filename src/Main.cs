@@ -1,11 +1,9 @@
 using System.Net;
-using VioletaRedis.src;
+using Shard.src;
+using static Shard.src.Node;
 
-var ip = IPAddress.Parse(Environment.GetEnvironmentVariable("VIOLETA_REDIS_IP") ?? "127.0.0.1");
-var port = int.Parse(Environment.GetEnvironmentVariable("VIOLETA_REDIS_PORT") ?? "6379");
-var replicaCount = int.Parse(Environment.GetEnvironmentVariable("VIOLETA_REDIS_REPLICA_COUNT") ?? "0");
+var nodeType = Enum.Parse<NodeType>(Environment.GetEnvironmentVariable("SHARD_NODE_TYPE") ?? "Follower");
+var ip = IPAddress.Parse(Environment.GetEnvironmentVariable("SHARD_IP") ?? "127.0.0.1");
+var port = int.Parse(Environment.GetEnvironmentVariable("SHARD_PORT") ?? "6379");
 
-foreach (var i in Enumerable.Range(1, replicaCount))
-    _ = new Replica(ip, port + i).Run();
-
-await new Server(ip, port).Run();
+await new Node(ip, port, nodeType).Run();

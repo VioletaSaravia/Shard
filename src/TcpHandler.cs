@@ -1,20 +1,19 @@
 using System.Net.Sockets;
 using System.Text;
-using static VioletaRedis.src.Server;
 
-namespace VioletaRedis.src;
+namespace Shard.src;
 
 public struct TcpHandler
 {
-    readonly Server Server;
+    readonly Node Server;
     public TcpClient Client;
     public NetworkStream Stream;
     public Memory<byte> Buffer;
 
 
-    public TcpHandler(TcpClient _client, Server server)
+    public TcpHandler(TcpClient client, Node server)
     {
-        Client = _client;
+        Client = client;
         Stream = Client.GetStream();
         Server = server;
 
