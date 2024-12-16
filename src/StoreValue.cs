@@ -1,4 +1,3 @@
-
 public record StoreValue(byte[] Value, DateTime? Expiry = null)
 {
     public enum ValueType : short
